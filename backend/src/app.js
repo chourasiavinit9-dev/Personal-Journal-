@@ -34,6 +34,7 @@ app.use((_req, res, next) => {
 const staticAllowedOrigins = [
   "https://life-os-33c6b.web.app",
   "https://life-os-33c6b.firebaseapp.com",
+  "https://lifeos-frontend-1037752492960.us-central1.run.app",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -43,6 +44,9 @@ const isOriginAllowed = (origin) => {
 
   // Allow explicit static origins
   if (staticAllowedOrigins.includes(origin)) return true;
+
+  // Allow all Cloud Run frontend domains
+  if (/^https:\/\/.*\.run\.app$/.test(origin)) return true;
 
   // Allow localhost on any port for local development & testing
   if (/^http:\/\/localhost:[0-9]+$/.test(origin)) return true;
