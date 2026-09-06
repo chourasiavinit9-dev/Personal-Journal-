@@ -10,7 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://life-os-33c6b.web.app"><strong>🌐 Live Demo →</strong></a>
+  <a href="https://life-os-33c6b.web.app"><strong>🌐 Live Web App →</strong></a>
+  &nbsp;•&nbsp;
+  <a href="https://lifeos-backend-1037752492960.us-central1.run.app/health"><strong>⚡ Cloud Run API →</strong></a>
   &nbsp;•&nbsp;
   <a href="#-features">Features</a>
   &nbsp;•&nbsp;

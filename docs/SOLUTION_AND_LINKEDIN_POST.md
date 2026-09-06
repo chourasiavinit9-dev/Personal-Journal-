@@ -73,6 +73,7 @@ Big shoutout to the Google Cloud team for building developer tooling that makes 
 
 Check it out below:
 🌐 Live Web App: https://life-os-33c6b.web.app
+⚡ Cloud Run API: https://lifeos-backend-1037752492960.us-central1.run.app
 💻 GitHub Repository: https://github.com/chourasiavinit9-dev/Personal-Journal-
 
 #AccelerateAIwithCloudRun #GoogleCloud #GeminiAI #CloudRun #Firebase #WebDevelopment #ArtificialIntelligence #Serverless #FullStack
