@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { TabType } from '../types';
 import { useLifeOS } from '../store/lifeOSStore';
-import { Sparkles, Search, PenTool, Compass, Ticket, Flower2, BookOpen, Smartphone, Sun } from 'lucide-react';
+import { Sparkles, Search, PenTool, Compass, Ticket, Flower2, BookOpen, Smartphone, Sun, Star } from 'lucide-react';
+
 
 interface HeaderProps {
   activeTab: TabType;
@@ -57,7 +58,8 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'crawls', label: 'City Crawls', icon: <Compass className="w-3.5 h-3.5" /> },
     { id: 'journal', label: 'Journal', icon: <BookOpen className="w-3.5 h-3.5" /> },
     { id: 'lockscreen', label: 'Lockscreen', icon: <Smartphone className="w-3.5 h-3.5" /> },
-    { id: 'wrapped', label: 'Wrapped', icon: <Sun className="w-3.5 h-3.5" />, badge: true }
+    { id: 'wrapped', label: 'Wrapped', icon: <Sun className="w-3.5 h-3.5" />, badge: true },
+    { id: 'zodiac', label: 'Celestial', icon: <Star className="w-3.5 h-3.5" /> }
   ];
 
   return (

@@ -1,0 +1,258 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIFEOS — Firestore Security Rules
+//
+// Philosophy:
+//   1. Default DENY — nothing is readable/writable unless explicitly allowed
+//   2. Every personal path is bound to request.auth.uid
+//   3. Admin operations require a server-side custom claim — never a client flag
+//   4. Public data (confession wall, templates) is read-only for auth users
+//   5. No rule ever contains "allow read, write: if true"
+//
+// Architecture note:
+//   The backend Cloud Run API uses the Firebase Admin SDK, which BYPASSES
+//   these rules entirely. These rules only protect DIRECT Firestore access
+//   (e.g. if someone tried to call Firestore from a browser or mobile client).
+//   They are still mandatory — defense in depth.
+// ─────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HELPER FUNCTIONS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Is the requester authenticated?
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // Does the requester own this document path?
+    function isOwner(userId) {
+      return isAuthed() && request.auth.uid == userId;
+    }
+
+    // Does the requester have an admin custom claim?
+    // Set via Firebase Admin SDK: auth.setCustomUserClaims(uid, { admin: true })
+    // Never set from the client — custom claims require server-side Admin SDK.
+    function isAdmin() {
+      return isAuthed() && request.auth.token.admin == true;
+    }
+
+    // Is the incoming data free of dangerous fields?
+    // Prevents clients from smuggling in admin flags or other users' UIDs.
+    function noEscalation() {
+      return !('uid' in request.resource.data)
+          && !('admin' in request.resource.data)
+          && !('role' in request.resource.data);
+    }
+
+    // Is the incoming write within reasonable size?
+    // Prevents clients from writing multi-MB payloads directly.
+    function withinSizeLimit() {
+      return request.resource.data.keys().size() < 30;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // USER PROFILE
+    // /users/{userId}
+    //
+    // Stores: displayName, companionType, companionPersonality, era, streak,
+    //         worldTheme, createdAt, lastActiveAt
+    //
+    // The backend writes most of this. Users can update their own display name
+    // and companion preferences only — not uid, not admin flags.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+
+      allow create: if isOwner(userId)
+                    && noEscalation()
+                    && withinSizeLimit();
+
+      allow update: if isOwner(userId)
+                    && noEscalation()
+                    && withinSizeLimit()
+                    // Only allow updating safe profile fields from client
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['displayName', 'companionType', 'companionPersonality',
+                                 'worldTheme', 'lastActiveAt']);
+
+      // Deletion handled by backend only (with data wipe cascade)
+      allow delete: if false;
+
+      // ───────────────────────────────────────────────────────────────────────
+      // MEMORIES (journal entries)
+      // /users/{userId}/memories/{memoryId}
+      //
+      // Stores: content, contentEn (translated), moodLabel, moodScore,
+      //         themes[], people[], locationTag, wordCount, createdAt,
+      //         geminiAnalysis (object), companionReaction, bookColor,
+      //         bookHeight, emotionScores (object), embedding (vector)
+      //
+      // Written by backend after Gemini analysis. Client reads only.
+      // ───────────────────────────────────────────────────────────────────────
+      match /memories/{memoryId} {
+        allow read: if isOwner(userId);
+
+        // Client cannot write memories directly — all writes go through
+        // the Cloud Run API which uses Admin SDK (bypasses rules).
+        // This rule blocks any attempt to bypass the backend.
+        allow write: if false;
+      }
+
+      // ───────────────────────────────────────────────────────────────────────
+      // INSIGHTS CACHE
+      // /users/{userId}/insights/{insightId}
+      //
+      // Stores: connectTheDots, plotTwist, era — pre-computed by backend.
+      // Client reads only — backend writes via Admin SDK.
+      // ───────────────────────────────────────────────────────────────────────
+      match /insights/{insightId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ───────────────────────────────────────────────────────────────────────
+      // WORLD STATE
+      // /users/{userId}/world/current
+      //
+      // Stores: unlockedObjects[], companionMood, roomTheme, bookshelf[],
+      //         streakCount, lastRoastWeek
+      //
+      // Derived by the worldEngine service — client reads only.
+      // ───────────────────────────────────────────────────────────────────────
+      match /world/{docId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ───────────────────────────────────────────────────────────────────────
+      // FUTURE ME CAPSULES
+      // /users/{userId}/capsules/{capsuleId}
+      //
+      // Stores: content, deliverAt, delivered (bool), geminiComparison,
+      //         createdAt
+      //
+      // Allow read (to show pending/delivered capsules).
+      // Write blocked from client — backend handles creation and delivery.
+      // ───────────────────────────────────────────────────────────────────────
+      match /capsules/{capsuleId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ───────────────────────────────────────────────────────────────────────
+      // WEEKLY ROAST CACHE
+      // /users/{userId}/roasts/{weekId}
+      //
+      // weekId format: "2025-W28" (ISO week number)
+      // Stores: roastText, stats (chaos/productivity/era scores), generated,
+      //         sharedCount
+      // ───────────────────────────────────────────────────────────────────────
+      match /roasts/{weekId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ───────────────────────────────────────────────────────────────────────
+      // STATS (streak, total memories, badges)
+      // /users/{userId}/stats/summary
+      // ───────────────────────────────────────────────────────────────────────
+      match /stats/{docId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ───────────────────────────────────────────────────────────────────────
+      // NOTIFICATION PREFERENCES
+      // /users/{userId}/preferences/notifications
+      //
+      // The one sub-collection clients CAN write — it's just user settings.
+      // No Gemini data, no memory content, no escalation risk.
+      // ───────────────────────────────────────────────────────────────────────
+      match /preferences/{docId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId)
+                     && noEscalation()
+                     && withinSizeLimit()
+                     && request.resource.data.keys()
+                        .hasOnly(['slackWebhook', 'emailDigest', 'dailyPrompt',
+                                  'weeklyRoast', 'updatedAt']);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // LEADERBOARD (friends' streaks — no raw entry data ever here)
+    // /leaderboard/{weekId}/scores/{uid}
+    //
+    // Written ONLY by Cloud Scheduler → Cloud Function (Admin SDK).
+    // Read by anyone who is authenticated — only exposes
+    // { displayName, streak, badgeCount, moodAvg } — no entry content.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /leaderboard/{weekId}/scores/{uid} {
+      allow read: if isAuthed();
+      allow write: if false; // Cloud Function (Admin SDK) writes only
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC CONFESSION WALL
+    // /public/wall/confessions/{confessionId}
+    //
+    // Stores: anonymisedText (Gemini-moderated), reactions (map), createdAt
+    // NOTE: uid is NEVER stored here — full anonymity.
+    //
+    // Anyone authenticated can read. Write is blocked — the backend
+    // handles moderation + anonymisation before posting.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /public/wall/confessions/{confessionId} {
+      allow read: if isAuthed();
+
+      // Reactions only — authenticated users can increment their chosen reaction.
+      // Structured as a map: { felt_this: 12, sending_love: 4, me_too: 8, been_there: 2 }
+      allow update: if isAuthed()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['reactions'])
+                    && request.resource.data.reactions.keys()
+                       .hasOnly(['felt_this', 'sending_love', 'me_too', 'been_there']);
+
+      allow create: if false; // Backend only
+      allow delete: if false; // Admin only (via Admin SDK)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ENTRY TEMPLATES (read-only global collection)
+    // /templates/{templateId}
+    //
+    // Stores: name, fields[], suggestedPrompts[], type
+    // Written by admin tooling. Users read to pick templates.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /templates/{templateId} {
+      allow read: if isAuthed();
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ADMIN AUDIT LOG
+    // /adminAuditLog/{logId}
+    //
+    // Written only by Admin SDK (Cloud Functions, Cloud Run admin routes).
+    // Readable only by admins — contains admin action history.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /adminAuditLog/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CATCH-ALL — deny everything not explicitly matched above
+    // This is implicit in Firestore (default deny) but stated explicitly
+    // as documentation that the omission is intentional.
+    // ─────────────────────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

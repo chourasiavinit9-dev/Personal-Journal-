@@ -4,6 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { auth } from './lib/firebase';
+import { AuthPage } from './components/AuthPage';
 import { LifeOSProvider, useLifeOS } from './store/lifeOSStore';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -14,6 +17,7 @@ import { CityCrawlsPassport } from './components/tabs/CityCrawlsPassport';
 import { JournalDesk } from './components/tabs/JournalDesk';
 import { LockscreenView } from './components/tabs/LockscreenView';
 import { YearWrapped } from './components/tabs/YearWrapped';
+import { ZodiacCopilot } from './components/tabs/ZodiacCopilot';
 import { NewTicketModal } from './components/NewTicketModal';
 import { CommandPaletteModal } from './components/CommandPaletteModal';
 import { TicketStub, TabType } from './types';
@@ -97,6 +101,13 @@ function LifeOSMain() {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-[#1F1A17] flex flex-col font-sans selection:bg-[#E9BA6B]/30 selection:text-[#1F1A17]">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded focus:outline-none"
+      >
+        Skip to content
+      </a>
+
       {/* Toast Notification for Tactile Operations */}
       {toastMessage && (
         <div className="fixed top-20 right-6 z-50 animate-bounce">
@@ -131,7 +142,7 @@ function LifeOSMain() {
           />
 
           {/* Main Content Area */}
-          <main className="flex-1 py-4">
+          <main id="main-content" tabIndex={-1} className="flex-1 py-4">
             {(activeTab === 'sanctuary' || (activeTab as string) === 'home') && (
               <SanctuaryHome
                 heroTicket={heroTicket}
@@ -167,6 +178,8 @@ function LifeOSMain() {
             )}
 
             {activeTab === 'wrapped' && <YearWrapped />}
+
+            {activeTab === 'zodiac' && <ZodiacCopilot />}
           </main>
 
           {/* Universal Tactile Footer */}
@@ -200,6 +213,29 @@ function LifeOSMain() {
 }
 
 export default function App() {
+  const [user, setUser] = useState<User | null | undefined>(undefined);
+
+  // Listen to Firebase auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+    return unsubscribe;
+  }, []);
+
+  // Loading state — Firebase is resolving auth from IndexedDB
+  if (user === undefined) {
+    return (
+      <div className="min-h-screen bg-[#14110E] flex items-center justify-center">
+        <div className="w-2 h-2 rounded-full bg-[#E9BA6B] animate-ping" />
+      </div>
+    );
+  }
+
+  // Not signed in — show Auth screen
+  if (!user) {
+    return <AuthPage onSignedIn={() => {}} />;
+  }
+
+  // Signed in — render full Life OS
   return (
     <LifeOSProvider>
       <LifeOSMain />

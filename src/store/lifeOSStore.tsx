@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { apiFetch } from '@/lib/api';
+import type { Memory, InsightResponse } from '@/lib/types';
 import {
   TicketStub,
   HabitItem,
@@ -203,6 +205,60 @@ const getInitialState = (): LifeOSState => {
     paperTone: 'cornflower'
   };
 };
+
+export const loadInitialState = getInitialState;
+export type SanctuaryState = LifeOSState;
+
+export async function loadLiveState(uid: string): Promise<Partial<SanctuaryState>> {
+  try {
+    const [memoriesData, insightsData] = await Promise.allSettled([
+      apiFetch<{ memories: Memory[] }>('/api/memories?limit=30'),
+      apiFetch<InsightResponse>('/api/insights'),
+    ]);
+
+    const memories =
+      memoriesData.status === 'fulfilled'
+        ? memoriesData.value.memories
+        : [];
+
+    const insights =
+      insightsData.status === 'fulfilled'
+        ? insightsData.value
+        : null;
+
+    // Map backend memory objects → your existing journalNotes shape
+    const journalNotes = memories.map((m) => ({
+      id: m.id,
+      title: m.title,
+      body: m.summary,
+      mood: m.moodLabel,
+      themes: m.themes,
+      createdAt: m.createdAt,
+      bookColor: m.bookColor,
+    }));
+
+    // Map insights → your existing digest shape
+    const digestPatch: Partial<SanctuaryDigest> = {
+      ...(insights?.era && {
+        wrappedTitle: insights.era.eraName,
+        wrappedSubtitle: insights.era.description,
+        habitPhilosophy: insights.era.whatIsShifting,
+      }),
+      ...(insights?.connectTheDots?.found && {
+        deskPromptText: insights.connectTheDots.pattern,
+      }),
+    };
+
+    return {
+      journalNotes: journalNotes as any,
+      digest: { ...INITIAL_DEMO_DATA.digest, ...digestPatch },
+    };
+  } catch (err) {
+    // Graceful fallback — demo data still renders if API is down
+    console.warn('[store] API unavailable, using demo data:', err);
+    return loadInitialState();
+  }
+}
 
 const LifeOSContext = createContext<LifeOSContextValue | null>(null);
 
@@ -575,106 +631,113 @@ export const LifeOSProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Global search across real state
   const searchEntities = useCallback(
     (query: string): SearchResultItem[] => {
-      const q = query.trim().toLowerCase();
-      if (!q) return [];
+      const raw = query.trim().toLowerCase();
+      if (!raw) return [];
 
-      const results: SearchResultItem[] = [];
+      // ─── Fuzzy scoring helper ──────────────────────────────────────────────
+      // Returns 0-100. 100 = exact, 80 = starts-with, 60 = word-starts-with,
+      // 40 = substring, 20 = fuzzy (all chars in order), 0 = no match.
+      const scoreText = (text: string, q: string): number => {
+        const t = text.toLowerCase();
+        if (t === q) return 100;
+        if (t.startsWith(q)) return 85;
+        const words = t.split(/\s+/);
+        if (words.some(w => w.startsWith(q))) return 65;
+        if (t.includes(q)) return 45;
+        // Fuzzy: all chars in order
+        let qi = 0;
+        for (let i = 0; i < t.length && qi < q.length; i++) {
+          if (t[i] === q[qi]) qi++;
+        }
+        return qi === q.length ? 20 : 0;
+      };
+
+      // Score across multiple fields, take the max
+      const fieldScore = (...fields: (string | undefined)[]): number => {
+        let best = 0;
+        for (const f of fields) {
+          if (!f) continue;
+          const s = scoreText(f, raw);
+          if (s > best) best = s;
+          // Multi-word query bonus
+          const words = raw.split(/\s+/);
+          if (words.length > 1) {
+            const multiScore = words.reduce((acc, w) => acc + scoreText(f, w), 0) / words.length;
+            if (multiScore > best) best = multiScore;
+          }
+        }
+        return best;
+      };
+
+      const results: (SearchResultItem & { _score: number })[] = [];
 
       // Intentions
       state.intentions.forEach((item) => {
-        if (item.text.toLowerCase().includes(q)) {
+        const score = fieldScore(item.text, item.category);
+        if (score > 0) {
           results.push({
-            id: item.id,
-            title: item.text,
+            id: item.id, title: item.text,
             subtitle: item.completed ? 'Completed Intention' : 'Active Intention',
-            type: 'intention',
-            tab: 'sanctuary',
-            meta: item.category
+            type: 'intention', tab: 'sanctuary', meta: item.category, _score: score
           });
         }
       });
 
       // Tickets
       state.tickets.forEach((ticket) => {
-        if (
-          ticket.title.toLowerCase().includes(q) ||
-          ticket.subtitle.toLowerCase().includes(q) ||
-          ticket.location.toLowerCase().includes(q) ||
-          ticket.quote.toLowerCase().includes(q) ||
-          ticket.category.toLowerCase().includes(q) ||
-          (ticket.companion && ticket.companion.toLowerCase().includes(q))
-        ) {
+        const score = fieldScore(ticket.title, ticket.subtitle, ticket.location, ticket.quote, ticket.category, ticket.companion);
+        if (score > 0) {
           results.push({
-            id: ticket.id,
-            title: ticket.title,
+            id: ticket.id, title: ticket.title,
             subtitle: `${ticket.location} • ${ticket.categoryLabel}`,
-            type: 'ticket',
-            tab: 'memories',
-            meta: `Ticket #${ticket.stubNumber}`
+            type: 'ticket', tab: 'memories', meta: `Ticket #${ticket.stubNumber}`, _score: score
           });
         }
       });
 
       // Habits
       state.habits.forEach((habit) => {
-        if (
-          habit.title.toLowerCase().includes(q) ||
-          habit.subtitle.toLowerCase().includes(q) ||
-          habit.category.toLowerCase().includes(q)
-        ) {
+        const score = fieldScore(habit.title, habit.subtitle, habit.category);
+        if (score > 0) {
           results.push({
-            id: habit.id,
-            title: habit.title,
-            subtitle: habit.subtitle,
-            type: 'habit',
-            tab: 'habits',
-            meta: `${habit.streak}d streak`
+            id: habit.id, title: habit.title, subtitle: habit.subtitle,
+            type: 'habit', tab: 'habits', meta: `${habit.streak}d streak`, _score: score
           });
         }
       });
 
       // Journal Notes
       state.journalNotes.forEach((note) => {
-        if (
-          note.title.toLowerCase().includes(q) ||
-          note.content.toLowerCase().includes(q) ||
-          (note.subtitle && note.subtitle.toLowerCase().includes(q)) ||
-          (note.tag && note.tag.toLowerCase().includes(q)) ||
-          (note.author && note.author.toLowerCase().includes(q))
-        ) {
+        const score = fieldScore(note.title, note.subtitle, note.content.slice(0, 200), note.tag, note.author, note.mood);
+        if (score > 0) {
           results.push({
-            id: note.id,
-            title: note.title,
-            subtitle: note.subtitle || note.content.slice(0, 50) + '...',
-            type: 'journal',
-            tab: 'journal',
-            meta: note.date
+            id: note.id, title: note.title,
+            subtitle: note.subtitle || note.content.slice(0, 50) + '…',
+            type: 'journal', tab: 'journal', meta: note.date, _score: score
           });
         }
       });
 
       // Checkpoints
       state.checkpoints.forEach((chk) => {
-        if (
-          chk.title.toLowerCase().includes(q) ||
-          chk.location.toLowerCase().includes(q) ||
-          chk.description.toLowerCase().includes(q)
-        ) {
+        const score = fieldScore(chk.title, chk.location, chk.description);
+        if (score > 0) {
           results.push({
-            id: chk.id,
-            title: chk.title,
-            subtitle: chk.location,
-            type: 'crawl',
-            tab: 'crawls',
-            meta: chk.stepNumber
+            id: chk.id, title: chk.title, subtitle: chk.location,
+            type: 'crawl', tab: 'crawls', meta: chk.stepNumber, _score: score
           });
         }
       });
 
-      return results;
+      // Sort by score descending, cap at 25 results
+      results.sort((a, b) => b._score - a._score);
+      return results.slice(0, 25).map(({ _score, ...item }) => item);
     },
     [state]
   );
+
+
+
 
   const resetToSeedData = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);

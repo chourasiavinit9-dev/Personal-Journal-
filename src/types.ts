@@ -1,4 +1,5 @@
-export type TabType = 'sanctuary' | 'memories' | 'crawls' | 'habits' | 'journal' | 'lockscreen' | 'wrapped';
+export type TabType = 'sanctuary' | 'memories' | 'crawls' | 'habits' | 'journal' | 'lockscreen' | 'wrapped' | 'zodiac';
+
 
 export interface MindfulIntention {
   id: string;
@@ -244,4 +245,10 @@ export interface SearchResultItem {
 export type DailyStreamItem = string | { id?: string | number; time?: string; text: string; tag?: string };
 
 export type PaperTone = 'cornflower' | 'wisteria' | 'matcha' | 'cedar';
+
+export interface ZodiacBirthData {
+  date: string;     // YYYY-MM-DD
+  time?: string;    // HH:MM (24h, optional)
+  city?: string;    // free text, optional
+}
 

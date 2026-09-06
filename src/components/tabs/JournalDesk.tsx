@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { apiFetchAudio } from '@/lib/api';
 import { JournalNote, PaperTone } from '../../types';
 import { soundSynthesizer } from '../../utils/soundSynthesizer';
 import { useLifeOS } from '../../store/lifeOSStore';
@@ -54,6 +55,56 @@ export const JournalDesk: React.FC<JournalDeskProps> = ({ notes: propNotes }) =>
     storeJournalNotes && storeJournalNotes.length > 0
       ? storeJournalNotes
       : (propNotes && propNotes.length > 0 ? propNotes : []);
+
+  function useYap(onMemorySaved: (note: JournalNote) => void) {
+    const mediaRef = useRef<MediaRecorder | null>(null);
+    const chunksRef = useRef<Blob[]>([]);
+    const [status, setStatus] = useState<'idle' | 'recording' | 'processing' | 'error'>('idle');
+
+    async function start() {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        setStatus('processing');
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        try {
+          const { memory } = await apiFetchAudio(blob);
+          onMemorySaved({
+            id: memory.id ?? crypto.randomUUID(),
+            title: memory.title,
+            body: memory.summary,
+            mood: memory.moodLabel,
+            themes: memory.themes,
+            createdAt: new Date().toISOString(),
+            bookColor: memory.bookColor,
+          } as any);
+          setStatus('idle');
+        } catch {
+          setStatus('error');
+          setTimeout(() => setStatus('idle'), 3000);
+        }
+      };
+
+      mediaRef.current = recorder;
+      recorder.start();
+      setStatus('recording');
+    }
+
+    function stop() {
+      mediaRef.current?.stop();
+    }
+
+    return { status, start, stop };
+  }
+
+  const { status: yapStatus, start: yapStart, stop: yapStop } = useYap((note) => addJournalNote(note));
 
   const [streamInput, setStreamInput] = useState('');
   const [isPlayingLoFi, setIsPlayingLoFi] = useState(false);
@@ -182,6 +233,7 @@ export const JournalDesk: React.FC<JournalDeskProps> = ({ notes: propNotes }) =>
             <Plus className="w-3.5 h-3.5 text-[#E9BA6B]" />
             <span>+ New Journal Note</span>
           </button>
+          <YapButton status={yapStatus} onStart={yapStart} onStop={yapStop} />
 
           {/* Double Click Tip */}
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-white/70 rounded-full border border-[#C3D3E6] text-[11px] font-mono text-[#3B5C87]">
@@ -1638,3 +1690,41 @@ export const JournalDesk: React.FC<JournalDeskProps> = ({ notes: propNotes }) =>
     </div>
   );
 };
+
+function YapButton({
+  status,
+  onStart,
+  onStop,
+}: {
+  status: 'idle' | 'recording' | 'processing' | 'error';
+  onStart: () => void;
+  onStop: () => void;
+}) {
+  const label =
+    status === 'idle' ? '🎙️ Just Yap'
+    : status === 'recording' ? '⏹ Stop'
+    : status === 'processing' ? 'Processing…'
+    : '❌ Error — try again';
+
+  return (
+    <button
+      onClick={status === 'recording' ? onStop : onStart}
+      disabled={status === 'processing'}
+      aria-label={label}
+      aria-busy={status === 'processing'}
+      style={{ minWidth: 44, minHeight: 44 }}  // a11y touch target
+      className={`px-3.5 py-1.5 rounded-full font-mono text-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 disabled:opacity-60 ${
+        status === 'recording'
+          ? 'bg-rose-600 text-white animate-pulse'
+          : status === 'error'
+          ? 'bg-red-100 text-red-700 border border-red-300'
+          : status === 'processing'
+          ? 'bg-slate-200 text-slate-700'
+          : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
