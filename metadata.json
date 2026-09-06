@@ -1,0 +1,6 @@
+{
+  "name": "Sanctuary Life OS",
+  "description": "Editorial Scrapbook, tactile memory ticket archive, mindful habit garden, and personal life OS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

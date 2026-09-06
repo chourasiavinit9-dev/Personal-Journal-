@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-linen: #F9F6F0;
+    --color-parchment: #F3EFE6;
+    --color-warmcard: #FDFBF7;
+    --color-espresso: #1F1A17;
+    --color-inkmute: #756D65;
+    --color-matcha: #8CA689;
+    --color-matchasoft: #E3EBDD;
+    --color-wisteria: #A39AC9;
+    --color-wisteriasoft: #EDE9F7;
+    --color-blush: #E5A4A4;
+    --color-blushsoft: #FAECEB;
+    --color-honey: #E9BA6B;
+    --color-honeysoft: #FDF4DF;
+    --color-kraft: #D8CAB7;
+    --color-lavenderborder: #C3BEEC;
+  }
+
+  body {
+    background-color: #F8F4EE;
+    background-image: radial-gradient(#E8E0D2 0.85px, transparent 0.85px), radial-gradient(#ECE5D9 0.85px, #F8F4EE 0.85px);
+    background-size: 34px 34px;
+    background-position: 0 0, 17px 17px;
+    color: #1F1A17;
+    font-family: 'Plus Jakarta Sans', 'DM Sans', -apple-system, sans-serif;
+  }
+}
+
+.font-serif {
+  font-family: 'Fraunces', 'Newsreader', Georgia, serif;
+}
+
+.font-sans {
+  font-family: 'Plus Jakarta Sans', 'DM Sans', sans-serif;
+}
+
+.font-hand {
+  font-family: 'Caveat', cursive;
+}
+
+.font-mono {
+  font-family: 'Space Mono', 'JetBrains Mono', monospace;
+}
+
+/* Washi Tape Graphic Styling */
+.washi-tape-lavender {
+  background: rgba(195, 190, 236, 0.7);
+  backdrop-filter: blur(2px);
+  border-left: 3px dashed rgba(163, 154, 201, 0.5);
+  border-right: 3px dashed rgba(163, 154, 201, 0.5);
+}
+
+.washi-tape-honey {
+  background: rgba(233, 186, 107, 0.65);
+  backdrop-filter: blur(2px);
+  border-left: 2px dashed rgba(210, 150, 70, 0.4);
+  border-right: 2px dashed rgba(210, 150, 70, 0.4);
+}
+
+.washi-tape-sage {
+  background: rgba(162, 192, 160, 0.65);
+  backdrop-filter: blur(2px);
+  border-left: 2px dashed rgba(110, 150, 110, 0.4);
+  border-right: 2px dashed rgba(110, 150, 110, 0.4);
+}
+
+/* Perforated ticket notched cutouts */
+.ticket-edge-left {
+  position: absolute;
+  left: -12px;
+  top: 58%;
+  width: 24px;
+  height: 24px;
+  background: #F8F4EE;
+  border-radius: 50%;
+  box-shadow: inset -2px 0 3px rgba(31, 26, 23, 0.08);
+}
+
+.ticket-edge-right {
+  position: absolute;
+  right: -12px;
+  top: 58%;
+  width: 24px;
+  height: 24px;
+  background: #F8F4EE;
+  border-radius: 50%;
+  box-shadow: inset 2px 0 3px rgba(31, 26, 23, 0.08);
+}
+
+/* Hanko / cancellation stamp */
+.hanko-stamp {
+  border: 2px solid #C84B31;
+  color: #C84B31;
+  position: relative;
+  opacity: 0.9;
+  transform: rotate(-6deg);
+  mix-blend-mode: multiply;
+}
+
+/* Barcode styling */
+.barcode-lines {
+  background: repeating-linear-gradient(
+    90deg,
+    #1F1A17,
+    #1F1A17 1.5px,
+    transparent 1.5px,
+    transparent 3px,
+    #1F1A17 3px,
+    #1F1A17 4.5px,
+    transparent 4.5px,
+    transparent 7px
+  );
+}
+
+/* Paper lined texture */
+.lined-memo {
+  background-image: repeating-linear-gradient(transparent, transparent 23px, #EBE3D7 23px, #EBE3D7 24px);
+  line-height: 24px;
+}
+
+/* Retro grid */
+.bg-retro-grid {
+  background-size: 20px 20px;
+  background-image: 
+    linear-gradient(to right, rgba(163, 154, 201, 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(163, 154, 201, 0.15) 1px, transparent 1px);
+}
+
+/* Dot grid */
+.stationery-dot-grid {
+  background-image: radial-gradient(#b8abeb 1.2px, transparent 1.2px);
+  background-size: 14px 14px;
+}
+
+/* Math Grid */
+.stationery-math-grid {
+  background-size: 22px 22px;
+  background-image: 
+    linear-gradient(to right, rgba(167, 155, 230, 0.25) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(167, 155, 230, 0.25) 1px, transparent 1px);
+}
+
+/* Hide scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Pulse animation */
+@keyframes softPulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+.animate-gentle-pulse {
+  animation: softPulse 4s ease-in-out infinite;
+}
